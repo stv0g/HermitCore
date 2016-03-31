@@ -1,6 +1,10 @@
 QEMU = @QEMU@ -machine accel=kvm -cpu host
+XHYVE = xyhve
 CROSSDIR = @CROSSDIR@
 JOBS = 20
+
+CORES = 10
+RAM = 8G
 
 default: linux/arch/x86/boot/bzImage
 	make PATH=$(PATH):$(CROSSDIR) -C hermit
@@ -16,13 +20,20 @@ test:
 	@echo "Nothing to test"
 
 qemu:
-	$(QEMU) -smp 10 -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 \
+	$(QEMU) -smp $(CORES) -m $(RAM) -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 \
 		-kernel linux/arch/x86/boot/bzImage -initrd config/initrd.cpio \
 		-append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0" \
 		-net nic,model=rtl8139 -net user -net dump \
 		-nographic -monitor telnet:127.0.0.1:1234,server,nowait \
 		-fsdev local,security_model=passthrough,id=fsdev0,path=$(shell realpath hermit) \
 		-device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hermit
+
+xhyve:
+	$(XHYVE) -A -c $(CORES) -m $(RAM) \
+		-s 0:0,hostbridge \
+		-s 5,virtio-9p,hermit=$(shell realpath hermit) \
+		-s 31,lpc -l com1,stdio \
+		-f kexec,linux/arch/x86/boot/bzImage,config/initrd.cpio,"console=ttyS0 root=/dev/ram0 rootfstype=ramfs init=init"
 
 clean:
 	make -C hermit clean
